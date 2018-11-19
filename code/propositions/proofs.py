@@ -1031,6 +1031,17 @@ class Proof:
 
 # Chapter 5 tasks
 
+
+def createSpecMap(deep_copy_proof,deep_copy_spec):
+    currProofAssumptions=[]
+    currProofConclusion=deep_copy_proof.lines[-1]
+    for line in deep_copy_proof.lines:
+        if line.rule==None:currProofAssumptions.append(line.formula)
+    specalizeProof=InferenceRule(currProofAssumptions,currProofConclusion.formula)
+    specMap=specalizeProof.createMapAndCheckCollidesAndMergs(deep_copy_spec)
+    return specMap,specalizeProof,currProofAssumptions
+
+
 def prove_specialization(proof, specialization):
     """ Given a proof of an inference rule and given a specialization of that
         rule, return a proof of the specialization using the same set of
@@ -1044,13 +1055,7 @@ def prove_specialization(proof, specialization):
     deep_copy_spec=deepcopy(specialization)
     specializeFormula=[]
     speicalizeLine=[]
-    currProofAssumptions=[]
-    currProofConclusion=deep_copy_proof.lines[-1]
-    for line in deep_copy_proof.lines:
-        if line.rule==None:currProofAssumptions.append(line.formula)
-    specalizeProof=InferenceRule(currProofAssumptions,currProofConclusion.formula)
-    specMap=specalizeProof.createMapAndCheckCollidesAndMergs(deep_copy_spec)
-
+    specMap,specalizeProof,currProofAssumptions=createSpecMap(deep_copy_proof,deep_copy_spec)
 
     for line in deep_copy_proof.lines:
         specializeFormula.append(line.formula.substitute_variables(specMap))
@@ -1058,7 +1063,6 @@ def prove_specialization(proof, specialization):
         curr_line.formula=spec_formula
         speicalizeLine.append(curr_line)
     finalProof=Proof(deep_copy_spec,deep_copy_proof.rules,speicalizeLine)
-    print(finalProof)
     return finalProof
 
 
@@ -1081,7 +1085,39 @@ def inline_proof_once(proof, line_number, lemma_proof):
     assert type(proof) is Proof
     assert type(lemma_proof) is Proof
     assert proof.lines[line_number].rule == lemma_proof.statement
-    # Task 5.2a
+
+    c_proof=deepcopy(proof)
+    c_lemma_proof=deepcopy(lemma_proof)
+
+
+
+    assumptions=[]
+    for i in proof.lines[line_number].assumptions:
+        assumptions.append(proof.lines[i].formula)
+    conclcusion=proof.lines[line_number].formula
+    newRule=InferenceRule(assumptions,conclcusion)
+    lemma_prove_spec=prove_specialization(lemma_proof,newRule)
+    currLines=c_proof.lines
+    newLineNumber=line_number-1
+    del currLines[line_number]
+    amount_of_lines_added=0
+    for line in lemma_prove_spec.lines:
+        if line.assumptions is not None:
+            for index in range(len(line.assumptions)):
+                line.assumptions[index]+=line_number-1
+        if(line.formula not in assumptions):
+            currLines.insert(newLineNumber,line)
+            amount_of_lines_added+=1
+        newLineNumber+=1
+    for line in c_proof.lines[newLineNumber:]:
+        if(line.assumptions is not None):
+            for i in range(len(line.assumptions)):
+                line.assumptions[i]+=amount_of_lines_added-1
+    k=3
+    c_proof.rules=c_proof.rules.union(lemma_proof.rules)
+    print(c_proof)
+    return c_proof
+
 
 
 def inline_proof(main_proof, lemma_proof):
@@ -1094,4 +1130,13 @@ def inline_proof(main_proof, lemma_proof):
         both proofs but without the "lemma" inference rule """
     assert type(main_proof) is Proof
     assert type(lemma_proof) is Proof
+    line_number=0
+    newProof=Proof
+    for line in main_proof.lines:
+        if line.rule==lemma_proof.statement:
+            newProof=inline_proof_once(main_proof,line_number,lemma_proof)
+        line_number+=1
+    main_proof.rules.discard(lemma_proof.statement)
+    return newProof
+
     # Task 5.2b
